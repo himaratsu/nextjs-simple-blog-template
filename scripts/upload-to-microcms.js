@@ -64,37 +64,64 @@ class MicroCMSUploader {
     }
   }
 
+  async findPngFiles(directoryPath) {
+    const pngFiles = [];
+    
+    async function scanDirectory(currentPath) {
+      try {
+        const entries = await fs.readdir(currentPath, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(currentPath, entry.name);
+          
+          if (entry.isDirectory()) {
+            await scanDirectory(fullPath);
+          } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.png')) {
+            pngFiles.push(fullPath);
+          }
+        }
+      } catch (error) {
+        console.warn(`Could not scan directory ${currentPath}:`, error.message);
+      }
+    }
+    
+    await scanDirectory(directoryPath);
+    return pngFiles;
+  }
+
   async uploadDirectory(directoryPath) {
     try {
-      const files = await fs.readdir(directoryPath);
-      const imageFiles = files.filter(file => 
-        /\.(png|jpg|jpeg)$/i.test(file)
-      );
+      const pngFiles = await this.findPngFiles(directoryPath);
 
-      if (imageFiles.length === 0) {
-        console.log('No image files found in directory');
+      if (pngFiles.length === 0) {
+        console.log('No PNG files found in directory and subdirectories');
         return [];
       }
 
+      console.log(`Found ${pngFiles.length} PNG files to upload`);
       const uploadResults = [];
       
-      for (const file of imageFiles) {
-        const filePath = path.join(directoryPath, file);
+      for (const filePath of pngFiles) {
+        const fileName = path.basename(filePath);
+        const relativePath = path.relative(directoryPath, filePath);
+        
         try {
           const url = await this.uploadImage(filePath);
           uploadResults.push({
-            fileName: file,
+            fileName: fileName,
+            relativePath: relativePath,
             url: url,
             success: true
           });
-          console.log(`✓ Uploaded: ${file} -> ${url}`);
+          console.log(`✓ Uploaded: ${relativePath} -> ${url}`);
         } catch (error) {
           uploadResults.push({
-            fileName: file,
+            fileName: fileName,
+            relativePath: relativePath,
             error: error.message,
             success: false
           });
-          console.error(`✗ Failed: ${file} - ${error.message}`);
+          console.error(`✗ Failed: ${relativePath} - ${error.message}`);
         }
       }
 
@@ -109,7 +136,7 @@ class MicroCMSUploader {
 async function main() {
   const serviceDomain = process.env.MICROCMS_SERVICE_DOMAIN;
   const apiKey = process.env.MICROCMS_API_KEY;
-  const screenshotsPath = process.env.PLAYWRIGHT_SCREENSHOTS_PATH || './playwright-screenshots';
+  const screenshotsPath = process.env.PLAYWRIGHT_SCREENSHOTS_PATH || '/tmp/playwright-mcp-output';
 
   if (!serviceDomain || !apiKey) {
     console.error('Error: MICROCMS_SERVICE_DOMAIN and MICROCMS_API_KEY environment variables are required');

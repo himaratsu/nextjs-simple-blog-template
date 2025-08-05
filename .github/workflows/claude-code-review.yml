@@ -106,7 +106,7 @@ jobs:
         env:
           MICROCMS_SERVICE_DOMAIN: ${{ secrets.MICROCMS_SERVICE_DOMAIN }}
           MICROCMS_API_KEY: ${{ secrets.MICROCMS_API_KEY }}
-          PLAYWRIGHT_SCREENSHOTS_PATH: ./playwright-screenshots
+          PLAYWRIGHT_SCREENSHOTS_PATH: /tmp/playwright-mcp-output
         run: |
           echo "Uploading screenshots to microCMS..."
           node scripts/upload-to-microcms.js 2>&1 | tee upload_output.txt

@@ -142,7 +142,7 @@ jobs:
             if (uploadResults.successful && uploadResults.successful.length > 0) {
               uploadResults.successful.forEach(result => {
                 comment += `### ${result.fileName}\n`;
-                comment += `![${result.fileName}](${result.url})\n\n`;
+                comment += `<img src="${result.url}" alt="${result.fileName}" width="480">\n\n`;
               });
             }
             

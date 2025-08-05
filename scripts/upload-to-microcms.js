@@ -15,7 +15,7 @@ class MicroCMSUploader {
       const fileBuffer = await fs.readFile(filePath);
       const fileName = path.basename(filePath);
       const fileExtension = path.extname(filePath).toLowerCase();
-      
+
       // Content-Type determination
       let contentType;
       switch (fileExtension) {
@@ -66,14 +66,14 @@ class MicroCMSUploader {
 
   async findPngFiles(directoryPath) {
     const pngFiles = [];
-    
+
     async function scanDirectory(currentPath) {
       try {
         const entries = await fs.readdir(currentPath, { withFileTypes: true });
-        
+
         for (const entry of entries) {
           const fullPath = path.join(currentPath, entry.name);
-          
+
           if (entry.isDirectory()) {
             await scanDirectory(fullPath);
           } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.png')) {
@@ -84,7 +84,7 @@ class MicroCMSUploader {
         console.warn(`Could not scan directory ${currentPath}:`, error.message);
       }
     }
-    
+
     await scanDirectory(directoryPath);
     return pngFiles;
   }
@@ -100,11 +100,11 @@ class MicroCMSUploader {
 
       console.log(`Found ${pngFiles.length} PNG files to upload`);
       const uploadResults = [];
-      
+
       for (const filePath of pngFiles) {
         const fileName = path.basename(filePath);
         const relativePath = path.relative(directoryPath, filePath);
-        
+
         try {
           const url = await this.uploadImage(filePath);
           uploadResults.push({
@@ -136,7 +136,7 @@ class MicroCMSUploader {
 async function main() {
   const serviceDomain = process.env.MICROCMS_SERVICE_DOMAIN;
   const apiKey = process.env.MICROCMS_API_KEY;
-  const screenshotsPath = process.env.PLAYWRIGHT_SCREENSHOTS_PATH || '/tmp/playwright-mcp-output';
+  const screenshotsPath = '/tmp/playwright-mcp-output';
 
   if (!serviceDomain || !apiKey) {
     console.error('Error: MICROCMS_SERVICE_DOMAIN and MICROCMS_API_KEY environment variables are required');
@@ -145,7 +145,7 @@ async function main() {
 
   try {
     const uploader = new MicroCMSUploader(serviceDomain, apiKey);
-    
+
     // Check if screenshots directory exists
     try {
       await fs.access(screenshotsPath);
@@ -156,7 +156,7 @@ async function main() {
 
     console.log(`Uploading screenshots from: ${screenshotsPath}`);
     const results = await uploader.uploadDirectory(screenshotsPath);
-    
+
     const successfulUploads = results.filter(r => r.success);
     const failedUploads = results.filter(r => !r.success);
 

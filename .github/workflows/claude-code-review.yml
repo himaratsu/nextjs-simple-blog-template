@@ -65,7 +65,6 @@ jobs:
           direct_prompt: |
             動作確認をして、変更後にWebサイトが壊れてないかをチェックします。
             動作確認ではPlaywright MCPを使い、localhost:3000にアクセスして要素を確認し、その内容をレポートしてください。
-            確認する箇所は「記事一覧ページ」「記事詳細ページ」とします。
             
             スクリーンショットを撮影する際は、以下の手順に従ってください：
             1. まず mcp__playwright__browser_resize を使用してブラウザサイズを幅840px、高さ600pxに設定してください
@@ -97,7 +96,7 @@ jobs:
           #   'Please provide a thorough code review focusing on our coding standards and best practices.' }}
           
           # Optional: Add specific tools for running tests or linting
-          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck),mcp__playwright__browser_navigate,mcp__playwright__browser_resize,mcp__playwright__browser_take_screenshot,mcp__playwright__browser_snapshot,mcp__playwright__browser_click,mcp__playwright__browser_type,mcp__playwright__browser_navigate_back"
+          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck),Bash(node scripts/upload-to-r2.js),mcp__playwright__browser_navigate,mcp__playwright__browser_resize,mcp__playwright__browser_take_screenshot,mcp__playwright__browser_snapshot,mcp__playwright__browser_click,mcp__playwright__browser_type,mcp__playwright__browser_navigate_back"
           
           # Optional: Skip review for certain conditions
           # if: |

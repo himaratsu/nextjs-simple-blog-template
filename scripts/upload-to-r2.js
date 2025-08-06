@@ -2,12 +2,19 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-class MicroCMSUploader {
-  constructor(serviceDomain, apiKey) {
-    this.serviceDomain = serviceDomain;
-    this.apiKey = apiKey;
-    this.baseUrl = `https://${serviceDomain}.microcms-management.io`;
+class R2Uploader {
+  constructor(accountId, accessKeyId, secretAccessKey, bucketName) {
+    this.bucketName = bucketName;
+    this.client = new S3Client({
+      region: 'auto',
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: accessKeyId,
+        secretAccessKey: secretAccessKey,
+      },
+    });
   }
 
   async uploadImage(filePath) {
@@ -30,34 +37,26 @@ class MicroCMSUploader {
           throw new Error(`Unsupported file type: ${fileExtension}`);
       }
 
-      // Create FormData
-      const boundary = '----formdata-boundary-' + Date.now();
-      const formData = [
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="file"; filename="${fileName}"`,
-        `Content-Type: ${contentType}`,
-        '',
-        fileBuffer.toString('binary'),
-        `--${boundary}--`
-      ].join('\r\n');
+      // Generate unique key with timestamp
+      const timestamp = Date.now();
+      const key = `screenshots/${timestamp}-${fileName}`;
 
-      const response = await fetch(`${this.baseUrl}/api/v1/media`, {
-        method: 'POST',
-        headers: {
-          'X-MICROCMS-API-KEY': this.apiKey,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': Buffer.byteLength(formData, 'binary')
-        },
-        body: Buffer.from(formData, 'binary')
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: fileBuffer,
+        ContentType: contentType,
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
-      }
+      await this.client.send(command);
 
-      const result = await response.json();
-      return result.url;
+      // Construct public URL if custom domain is set
+      const customDomain = process.env.R2_PUBLIC_DOMAIN;
+      const url = customDomain 
+        ? `https://${customDomain}/${key}`
+        : `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${this.bucketName}/${key}`;
+
+      return url;
     } catch (error) {
       console.error(`Failed to upload ${filePath}:`, error.message);
       throw error;
@@ -134,17 +133,20 @@ class MicroCMSUploader {
 }
 
 async function main() {
-  const serviceDomain = process.env.MICROCMS_SERVICE_DOMAIN;
-  const apiKey = process.env.MICROCMS_API_KEY;
-  const screenshotsPath = '/tmp/playwright-mcp-output';
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const bucketName = process.env.R2_BUCKET_NAME;
+  const screenshotsPath = process.env.SCREENSHOTS_PATH || '/tmp/playwright-mcp-output';
 
-  if (!serviceDomain || !apiKey) {
-    console.error('Error: MICROCMS_SERVICE_DOMAIN and MICROCMS_API_KEY environment variables are required');
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
+    console.error('Error: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME environment variables are required');
+    console.error('Optional: R2_PUBLIC_DOMAIN for custom domain, SCREENSHOTS_PATH for custom screenshot directory');
     process.exit(1);
   }
 
   try {
-    const uploader = new MicroCMSUploader(serviceDomain, apiKey);
+    const uploader = new R2Uploader(accountId, accessKeyId, secretAccessKey, bucketName);
 
     // Check if screenshots directory exists
     try {
@@ -191,4 +193,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { MicroCMSUploader };
+module.exports = { R2Uploader };

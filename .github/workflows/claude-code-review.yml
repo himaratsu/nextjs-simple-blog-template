@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write
+      issues: write
       id-token: write
     
     steps:
@@ -56,7 +56,12 @@ jobs:
         id: claude-review
         uses: anthropics/claude-code-action@beta
         env:
-          PLAYWRIGHT_SCREENSHOTS_PATH: ./playwright-screenshots
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_PUBLIC_DOMAIN: ${{ secrets.R2_PUBLIC_DOMAIN }}
+          SCREENSHOTS_PATH: /tmp/playwright-mcp-output
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -66,10 +71,17 @@ jobs:
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |
             動作確認をして、変更後にWebサイトが壊れてないかをチェックします。
-            動作確認ではPlaywright MCPを使い、localhost:3000にアクセスして要素を確認し、その内容をレポートしてください。
+            動作確認ではPlaywright MCPを使い、localhost:3000にアクセスして要素を確認し、その内容を簡潔にレポートしてください。
             
-            スクリーンショットを撮影する際は、環境変数PLAYWRIGHT_SCREENSHOTS_PATHで指定されたディレクトリに保存してください。
-            例: mcp__playwright__browser_take_screenshot を使用する際、filename パラメータに ${PLAYWRIGHT_SCREENSHOTS_PATH}/page-screenshot.png のように環境変数を使用して指定してください。
+            スクリーンショットを撮影する際は、以下の手順に従ってください：
+            1. まず mcp__playwright__browser_resize を使用してブラウザサイズを幅840px、高さ600pxに設定してください
+            2. その後、スクリーンショットを撮影し、ディレクトリに保存してください
+            3. 保存したスクリーンショットをCloudflare R2にアップロードしてください
+              * アップロードは `node scripts/upload-to-r2.js` のようにできます
+              * アップロードしたURLは `<img src="${url}" alt="${fileName}" width="480">` のようにレポートに含めてください
+              * 動作確認の関連する箇所にスクリーンショットを貼ると分かりやすいです
+            
+            開発環境はすでに起動しているので、npm install や npm run dev は不要です。
 
             応答はすべて日本語で行うこと。
             
@@ -93,73 +105,9 @@ jobs:
           #   'Please provide a thorough code review focusing on our coding standards and best practices.' }}
           
           # Optional: Add specific tools for running tests or linting
-          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck),mcp__playwright__browser_navigate,mcp__playwright__browser_take_screenshot,mcp__playwright__browser_snapshot,mcp__playwright__browser_click,mcp__playwright__browser_type,mcp__playwright__browser_navigate_back"
+          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck),Bash(node scripts/upload-to-r2.js),mcp__playwright__browser_navigate,mcp__playwright__browser_resize,mcp__playwright__browser_take_screenshot,mcp__playwright__browser_snapshot,mcp__playwright__browser_click,mcp__playwright__browser_type,mcp__playwright__browser_navigate_back"
           
           # Optional: Skip review for certain conditions
           # if: |
           #   !contains(github.event.pull_request.title, '[skip-review]') &&
           #   !contains(github.event.pull_request.title, '[WIP]')
-
-      - name: Upload screenshots to microCMS
-        id: upload-screenshots
-        if: always()
-        env:
-          MICROCMS_SERVICE_DOMAIN: ${{ secrets.MICROCMS_SERVICE_DOMAIN }}
-          MICROCMS_API_KEY: ${{ secrets.MICROCMS_API_KEY }}
-          PLAYWRIGHT_SCREENSHOTS_PATH: ./playwright-screenshots
-        run: |
-          echo "Uploading screenshots to microCMS..."
-          node scripts/upload-to-microcms.js 2>&1 | tee upload_output.txt
-          
-          # Extract JSON results if present
-          if grep -q "UPLOAD_RESULTS_JSON" upload_output.txt; then
-            sed -n '/--- UPLOAD_RESULTS_JSON ---/,/--- END_UPLOAD_RESULTS_JSON ---/p' upload_output.txt | \
-            sed '1d;$d' > upload_results.json
-            
-            # Set output for next step
-            echo "upload_results<<EOF" >> $GITHUB_OUTPUT
-            cat upload_results.json >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "upload_results={\"error\": \"No upload results found\"}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Comment PR with screenshot URLs
-        if: always() && steps.upload-screenshots.outputs.upload_results
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const uploadResults = JSON.parse(`${{ steps.upload-screenshots.outputs.upload_results }}`);
-            
-            if (uploadResults.error) {
-              console.log("No screenshot upload results to comment");
-              return;
-            }
-            
-            let comment = "## 📸 スクリーンショット\n\n";
-            comment += "動作確認用のスクリーンショットがmicroCMSにアップロードされました：\n\n";
-            
-            if (uploadResults.successful && uploadResults.successful.length > 0) {
-              uploadResults.successful.forEach(result => {
-                comment += `### ${result.fileName}\n`;
-                comment += `![${result.fileName}](${result.url})\n\n`;
-              });
-            }
-            
-            if (uploadResults.failed && uploadResults.failed.length > 0) {
-              comment += "### ❌ アップロードに失敗したファイル\n\n";
-              uploadResults.failed.forEach(result => {
-                comment += `- ${result.fileName}: ${result.error}\n`;
-              });
-            }
-            
-            comment += `\n---\n*アップロード日時: ${new Date().toISOString()}*`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-

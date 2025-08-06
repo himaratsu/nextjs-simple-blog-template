@@ -65,6 +65,7 @@ jobs:
           direct_prompt: |
             動作確認をして、変更後にWebサイトが壊れてないかをチェックします。
             動作確認ではPlaywright MCPを使い、localhost:3000にアクセスして要素を確認し、その内容をレポートしてください。
+            確認する箇所は「記事一覧ページ」「記事詳細ページ」とします。
             
             スクリーンショットを撮影する際は、以下の手順に従ってください：
             1. まず mcp__playwright__browser_resize を使用してブラウザサイズを幅640px、高さ800pxに設定してください
@@ -99,16 +100,19 @@ jobs:
           #   !contains(github.event.pull_request.title, '[skip-review]') &&
           #   !contains(github.event.pull_request.title, '[WIP]')
 
-      - name: Upload screenshots to microCMS
+      - name: Upload screenshots to Cloudflare R2
         id: upload-screenshots
         if: always()
         env:
-          MICROCMS_SERVICE_DOMAIN: ${{ secrets.MICROCMS_SERVICE_DOMAIN }}
-          MICROCMS_API_KEY: ${{ secrets.MICROCMS_API_KEY }}
-          PLAYWRIGHT_SCREENSHOTS_PATH: /tmp/playwright-mcp-output
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_PUBLIC_DOMAIN: ${{ secrets.R2_PUBLIC_DOMAIN }}
+          SCREENSHOTS_PATH: /tmp/playwright-mcp-output
         run: |
-          echo "Uploading screenshots to microCMS..."
-          node scripts/upload-to-microcms.js 2>&1 | tee upload_output.txt
+          echo "Uploading screenshots to Cloudflare R2..."
+          node scripts/upload-to-r2.js 2>&1 | tee upload_output.txt
           
           # Extract JSON results if present
           if grep -q "UPLOAD_RESULTS_JSON" upload_output.txt; then
@@ -136,7 +140,7 @@ jobs:
             }
             
             let comment = "## 📸 スクリーンショット\n\n";
-            comment += "動作確認用のスクリーンショットがmicroCMSにアップロードされました：\n\n";
+            comment += "動作確認用のスクリーンショットがCloudflare R2にアップロードされました：\n\n";
             
             if (uploadResults.successful && uploadResults.successful.length > 0) {
               uploadResults.successful.forEach(result => {
